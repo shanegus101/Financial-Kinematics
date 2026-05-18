@@ -47,80 +47,6 @@ body {
 }
 
 @media (max-width: 600px) {
-    .controls { grid-template-columns: 1fr; }
-    .chart-container { height: 300px; }
-}
-
-.slider-box { 
-    display: flex; 
-    flex-direction: column; 
-    align-items: flex-start; 
-}
-
-.label-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start; 
-    gap: 10px; 
-    width: 100%;
-    margin-bottom: 8px;
-}
-
-.label-text { 
-    font-weight: 600; 
-    font-size: 0.95em; 
-    color: #444; 
-}
-
-.num-input {
-    width: 100px;
-    padding: 4px 8px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-family: inherit;
-    font-weight: bold;
-    color: #4472c4;
-    font-size: 0.95em;
-    background: #fff;
-    transition: all 0.2s ease;
-}
-
-.num-input:focus {
-    outline: none;
-    border-color: #4472c4;
-    box-shadow: 0 0 0 2px rgba(68,114,196,0.2);
-}
-
-input[type=range] { 
-    -webkit-appearance: none;
-    width: 100%; 
-    background: transparent;
-    cursor: pointer; 
-}
-
-input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    height: 18px;
-    width: 18px;
-    border-radius: 50%;
-    background: #4472c4;
-    cursor: pointer;
-    margin-top: -6px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    transition: transform 0.1s;
-}
-
-input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
-
-input[type=range]::-webkit-slider-runnable-track {
-    width: 100%;
-    height: 6px;
-    cursor: pointer;
-    background: #dee2e6;
-    border-radius: 3px;
-}
-
-@media (max-width: 600px) {
     .dashboard {
         padding: 15px;
     }
@@ -141,34 +67,72 @@ input[type=range]::-webkit-slider-runnable-track {
 
     .controls {
         grid-template-columns: 1fr;
-        gap: 12px;
+        gap: 16px;
         padding: 15px;
     }
 
-    /* Key fix: label on top full-width, input floated right */
+    /* Label goes full-width on its own line */
     .label-row {
         flex-wrap: wrap;
-        justify-content: space-between;
-        align-items: center;
-        gap: 6px;
+        gap: 0;
+        margin-bottom: 6px;
     }
 
     .label-text {
+        width: 100%;
         font-size: 0.85em;
-        flex: 1 1 auto;
-        white-space: nowrap;
+        margin-bottom: 6px;
+    }
+
+    /* Slider and input share a row */
+    .slider-box {
+        gap: 4px;
+    }
+
+    .slider-box input[type=range] {
+        flex: 1;
+        min-width: 0;
     }
 
     .num-input {
-        width: 80px;
+        width: 72px;
         font-size: 0.85em;
         padding: 3px 6px;
         flex-shrink: 0;
     }
 
-    /* Bigger touch target for sliders */
-    input[type=range] {
-        height: 20px;
+    /* Rearrange slider-box to: label row, then slider+input row */
+    .slider-box {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .label-row + input[type=range] {
+        /* slider sits directly under label */
+        order: 2;
+    }
+
+    /* Put slider and num-input side by side */
+    .slider-box {
+        display: grid;
+        grid-template-rows: auto auto;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 4px 10px;
+    }
+
+    .label-row {
+        grid-column: 1 / -1; /* label spans full width */
+    }
+
+    .slider-box input[type=range] {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .num-input {
+        grid-column: 2;
+        grid-row: 2;
     }
 
     input[type=range]::-webkit-slider-thumb {
