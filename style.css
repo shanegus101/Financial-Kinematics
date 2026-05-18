@@ -121,31 +121,58 @@ input[type=range]::-webkit-slider-runnable-track {
 }
 
 @media (max-width: 600px) {
-    /* Make the dashboard padding smaller on phones */
     .dashboard {
         padding: 15px;
     }
 
-    /* Stack stats vertically if they get too crowded */
     .header-stats {
-        grid-template-columns: 1fr 1fr; /* 2x2 grid on mobile */
+        grid-template-columns: 1fr 1fr;
         gap: 10px;
+        padding: 15px;
     }
 
-    /* Shrink font sizes slightly for mobile */
     .stat-card p {
         font-size: 1.1em;
     }
 
-    /* Ensure chart doesn't push layout out */
     .chart-container {
         height: 250px;
     }
 
-    /* Stack controls vertically */
     .controls {
         grid-template-columns: 1fr;
-        gap: 15px;
+        gap: 12px;
         padding: 15px;
+    }
+
+    /* Key fix: label on top full-width, input floated right */
+    .label-row {
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .label-text {
+        font-size: 0.85em;
+        flex: 1 1 auto;
+        white-space: nowrap;
+    }
+
+    .num-input {
+        width: 80px;
+        font-size: 0.85em;
+        padding: 3px 6px;
+        flex-shrink: 0;
+    }
+
+    /* Bigger touch target for sliders */
+    input[type=range] {
+        height: 20px;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+        height: 22px;
+        width: 22px;
     }
 }
