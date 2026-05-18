@@ -111,10 +111,35 @@ input[type=range]::-webkit-slider-thumb {
 
 input[type=range]::-webkit-slider-thumb:hover { background: #2b6cb0; }
 
-/* Responsive Adjustments */
 @media (max-width: 600px) {
-    .dashboard { padding: 15px; }
-    .header-stats { grid-template-columns: 1fr 1fr; gap: 10px; }
-    .chart-container { height: 250px; }
-    .controls { grid-template-columns: 1fr; gap: 15px; padding: 15px; }
+    /* 1. Reduce overall padding to use the screen space */
+    .dashboard {
+        padding: 10px;
+        margin: 5px;
+    }
+
+    /* 2. Stack the header stats into a 2x2 grid */
+    .header-stats {
+        grid-template-columns: 1fr 1fr;
+        padding: 10px;
+        gap: 5px;
+    }
+    
+    /* 3. Make text slightly smaller so it doesn't wrap weirdly */
+    .stat-card h3 { font-size: 0.7em; }
+    .stat-card p { font-size: 1.1em; }
+
+    /* 4. Force the controls to stack in one single column */
+    .controls {
+        grid-template-columns: 1fr;
+        padding: 15px;
+        gap: 15px;
+    }
+
+    /* 5. Shrink the chart height for phones */
+    .chart-container {
+        height: 250px;
+    }
 }
+
+
