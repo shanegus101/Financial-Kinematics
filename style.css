@@ -119,3 +119,33 @@ input[type=range]::-webkit-slider-runnable-track {
     background: #dee2e6;
     border-radius: 3px;
 }
+
+@media (max-width: 600px) {
+    /* Make the dashboard padding smaller on phones */
+    .dashboard {
+        padding: 15px;
+    }
+
+    /* Stack stats vertically if they get too crowded */
+    .header-stats {
+        grid-template-columns: 1fr 1fr; /* 2x2 grid on mobile */
+        gap: 10px;
+    }
+
+    /* Shrink font sizes slightly for mobile */
+    .stat-card p {
+        font-size: 1.1em;
+    }
+
+    /* Ensure chart doesn't push layout out */
+    .chart-container {
+        height: 250px;
+    }
+
+    /* Stack controls vertically */
+    .controls {
+        grid-template-columns: 1fr;
+        gap: 15px;
+        padding: 15px;
+    }
+}
