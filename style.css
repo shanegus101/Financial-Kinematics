@@ -64,10 +64,42 @@ body {
     width: 100%;
 }
 
+/* Enhanced Label & Tooltip Setup */
 .label-text { 
     font-weight: 600; 
     font-size: 0.9em; 
     color: #4a5568; 
+    position: relative;
+    cursor: help;
+    border-bottom: 1px dashed #cbd5e0;
+    padding-bottom: 2px;
+}
+
+.label-text::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 140%;
+    left: 50%;
+    transform: translateX(-50%) scale(0.95);
+    background: #2d3748;
+    color: #ffffff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.8em;
+    font-weight: 400;
+    line-height: 1.4;
+    width: 240px;
+    white-space: normal;
+    z-index: 999;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.label-text:hover::after {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
 }
 
 .num-input {
@@ -112,34 +144,37 @@ input[type=range]::-webkit-slider-thumb {
 input[type=range]::-webkit-slider-thumb:hover { background: #2b6cb0; }
 
 @media (max-width: 600px) {
-    /* 1. Reduce overall padding to use the screen space */
     .dashboard {
         padding: 10px;
         margin: 5px;
     }
 
-    /* 2. Stack the header stats into a 2x2 grid */
     .header-stats {
         grid-template-columns: 1fr 1fr;
         padding: 10px;
         gap: 5px;
     }
     
-    /* 3. Make text slightly smaller so it doesn't wrap weirdly */
     .stat-card h3 { font-size: 0.7em; }
     .stat-card p { font-size: 1.1em; }
 
-    /* 4. Force the controls to stack in one single column */
     .controls {
         grid-template-columns: 1fr;
         padding: 15px;
         gap: 15px;
     }
 
-    /* 5. Shrink the chart height for phones */
     .chart-container {
         height: 250px;
     }
+
+    .label-text::after {
+        left: 0;
+        transform: translateX(0) scale(0.95);
+        width: 200px;
+    }
+    
+    .label-text:hover::after {
+        transform: translateX(0) scale(1);
+    }
 }
-
-
