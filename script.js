@@ -280,7 +280,10 @@ const mainChart = new Chart(ctx, {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 400, easing: 'easeOutQuart' },
-        interaction: { mode: 'index', intersect: false },
+        
+        // 1. CHANGE INTERACTION MODE to 'nearest' along the X-axis
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        
         scales: {
             x: { type: 'linear', position: 'bottom', min: 0, max: 40, title: { display: true, text: 'Years', font: { weight: 'bold' } } },
             y: { 
@@ -303,10 +306,8 @@ const mainChart = new Chart(ctx, {
             crossoverLine: { xVal: null },
             tooltip: {
                 enabled: false, 
-                filter: function(tooltipItem) {
-                    // FIXES "YEAR 0.0" BUG: Drops the workspace milestone point from running index-matching logic
-                    return tooltipItem.datasetIndex !== 5;
-                },
+                // 2. REMOVE the filter function completely. 
+                // We WANT the orange dot to be recognized so we can pull its exact decimal X-value.
                 external: function(context) {
                     const tooltipModel = context.tooltip;
                     if (tooltipModel.opacity === 0) return; 
