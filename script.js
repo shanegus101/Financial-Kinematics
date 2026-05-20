@@ -33,19 +33,91 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
         }
     }
 
+    // Solve for Crossover: Balance * r = PMT
+    // C * (1+r)^t - PMT/r = PMT/r  =>  C * (1+r)^t = 2*PMT/r  =>  (1+r)^t = (2*PMT) / (r*C)
+    let crossoverYear = null;
+    if (PMT > 0) {
+        const argument = (2 * PMT) / (r * C);
+        if (argument > 0) {
+            const tCross = Math.log(argument) / lnA;
+            if (tCross >= 0 && tCross <= 40) {
+                crossoverYear = tCross;
+            } else if (tCross < 0) {
+                // If tCross < 0, it means initial principal growth already exceeds annual deposits at Year 0
+                crossoverYear = 0;
+            }
+        }
+    }
+
     return {
         current: { balance, velocity, acceleration },
         path,
         contributionsPath,
         targetLine,
         yearsToTarget,
+        crossoverYear,
         realRate: r
     };
 }
 
+// Inline Canvas Plugin to render the Crossover vertical line cleanly
+const crossoverPlugin = {
+    id: 'crossoverLine',
+    afterDraw: (chart) => {
+        const options = chart.config.options.plugins.crossoverLine;
+        if (options && options.xVal !== null) {
+            const xVal = options.xVal;
+            const xAxis = chart.scales.x;
+            const yAxis = chart.scales.y;
+            
+            // Only draw if the crossover point sits within our visible 0-40 window
+            if (xVal >= xAxis.min && xVal <= xAxis.max) {
+                const xPixel = xAxis.getPixelForValue(xVal);
+                const topY = yAxis.top;
+                const bottomY = yAxis.bottom;
+                const ctx = chart.ctx;
+                
+                ctx.save();
+                
+                // Draw Dashed Vertical Line
+                ctx.beginPath();
+                ctx.setLineDash([6, 4]);
+                ctx.moveTo(xPixel, topY);
+                ctx.lineTo(xPixel, bottomY);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#e74c3c'; // Vivid crimson red
+                ctx.stroke();
+                
+                // Dynamic Text Alignment (switches sides if line hits the right edge of the screen)
+                const textSpace = 8;
+                ctx.font = 'bold 11px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif';
+                
+                if (xPixel + 130 > xAxis.right) {
+                    ctx.textAlign = 'right';
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.fillText('⚡ Compounding Crossover', xPixel - textSpace, topY + 15);
+                    ctx.font = '10px sans-serif';
+                    ctx.fillStyle = '#555';
+                    ctx.fillText(`Year ${xVal.toFixed(1)} (Growth ≥ Deposits)`, xPixel - textSpace, topY + 30);
+                } else {
+                    ctx.textAlign = 'left';
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.fillText('⚡ Compounding Crossover', xPixel + textSpace, topY + 15);
+                    ctx.font = '10px sans-serif';
+                    ctx.fillStyle = '#555';
+                    ctx.fillText(`Year ${xVal.toFixed(1)} (Growth ≥ Deposits)`, xPixel + textSpace, topY + 30);
+                }
+                
+                ctx.restore();
+            }
+        }
+    }
+};
+
 const ctx = document.getElementById('mainChart').getContext('2d');
 const mainChart = new Chart(ctx, {
     type: 'line',
+    plugins: [crossoverPlugin], // Register the inline plugin
     data: {
         datasets: [
             {
@@ -55,7 +127,7 @@ const mainChart = new Chart(ctx, {
                 borderWidth: 2,
                 pointRadius: 0,
                 fill: 'origin',
-                backgroundColor: 'rgba(160, 174, 192, 0.25)', // Neutral gray baseline layer
+                backgroundColor: 'rgba(160, 174, 192, 0.25)', 
                 tension: 0.4
             },
             {
@@ -65,8 +137,8 @@ const mainChart = new Chart(ctx, {
                 borderWidth: 3,
                 pointRadius: 0,
                 pointHoverRadius: 6,
-                fill: '-1', // Fills the space dynamically between this line and the contributions dataset below it
-                backgroundColor: 'rgba(68, 114, 196, 0.25)', // Rich blue compounding growth layer
+                fill: '-1', 
+                backgroundColor: 'rgba(68, 114, 196, 0.25)', 
                 tension: 0.4 
             }, 
             {
@@ -123,13 +195,15 @@ const mainChart = new Chart(ctx, {
                     filter: item => item.text !== 'Current Position' 
                 } 
             },
+            crossoverLine: {
+                xVal: null // Placeholder state updated dynamically inside updateApp()
+            },
             tooltip: {
                 callbacks: {
                     label: function(context) {
                         const datasetIndex = context.datasetIndex;
                         const dataIndex = context.dataIndex;
                         
-                        // Guard clause to ensure arrays are fully initialized
                         if (!context.chart.data.datasets[0].data[dataIndex] || !context.chart.data.datasets[1].data[dataIndex]) {
                             return '';
                         }
@@ -200,6 +274,9 @@ function updateApp() {
     } else {
         mainChart.options.scales.y.max = undefined;
     }
+
+    // Update the inline plugin's configuration state before redraw
+    mainChart.options.plugins.crossoverLine.xVal = results.crossoverYear;
 
     mainChart.data.datasets[0].data = results.contributionsPath;
     mainChart.data.datasets[1].data = results.path;
