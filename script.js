@@ -79,6 +79,11 @@ const mainChart = new Chart(ctx, {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 400, easing: 'easeOutQuart' },
+        // Allows line and area hovering without pixel-perfect coordinate intersection
+        interaction: {
+            mode: 'index',
+            intersect: false
+        },
         scales: {
             x: { type: 'linear', position: 'bottom', min: 0, max: 40, title: { display: true, text: 'Years', font: { weight: 'bold' } } },
             y: { 
@@ -100,7 +105,6 @@ const mainChart = new Chart(ctx, {
             tooltip: {
                 callbacks: {
                     label: function(context) {
-                        // Tooltip rules for hovering over the Target Line (Green)
                         if (context.datasetIndex === 1) {
                             return [
                                 `Target Wealth: $${context.parsed.y.toLocaleString()}`,
@@ -108,7 +112,6 @@ const mainChart = new Chart(ctx, {
                             ];
                         }
                         
-                        // Tooltip rules for hovering over the Wealth Area (Blue)
                         const t = context.parsed.x;
                         const inf = parseFloat(document.getElementById('infInput').value) / 100 || 0;
                         const nom = parseFloat(document.getElementById('rateInput').value) / 100 || 0;
