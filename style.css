@@ -26,6 +26,8 @@ body {
     padding: 20px; 
     border-radius: 10px; 
     border: 1px solid #eee; 
+    position: relative;
+    z-index: 10;
 }
 
 .stat-card { text-align: center; }
