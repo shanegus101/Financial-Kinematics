@@ -81,7 +81,19 @@ const mainChart = new Chart(ctx, {
         animation: { duration: 400, easing: 'easeOutQuart' },
         scales: {
             x: { type: 'linear', position: 'bottom', min: 0, max: 40, title: { display: true, text: 'Years', font: { weight: 'bold' } } },
-            y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000000).toFixed(1) + 'M' } }
+            y: { 
+                beginAtZero: true, 
+                ticks: { 
+                    callback: function(v) {
+                        if (v >= 1000000) {
+                            return '$' + (v / 1000000).toFixed(1) + 'M';
+                        } else if (v >= 1000) {
+                            return '$' + (v / 1000).toFixed(0) + 'K';
+                        }
+                        return '$' + v;
+                    }
+                } 
+            }
         },
         plugins: { 
             legend: { display: true, position: 'top', labels: { filter: item => item.text !== 'Current Position' } },
@@ -144,6 +156,13 @@ function updateApp() {
     } else {
         targetEl.innerText = "Unreachable";
         targetEl.style.color = "#e74c3c";
+    }
+
+    // Dynamic Axis Scaling Rule for Small Targets
+    if (target < 1000000 && target > 0) {
+        mainChart.options.scales.y.max = Math.max(target * 2.5, results.current.balance * 1.2, 50000);
+    } else {
+        mainChart.options.scales.y.max = undefined;
     }
 
     mainChart.data.datasets[0].data = results.path;
