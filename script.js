@@ -12,10 +12,15 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
     const acceleration = C * Math.pow(lnA, 2) * Math.pow(1 + r, t);
 
     const path = [];
+    const contributionsPath = [];
     const targetLine = [];
+    
     for (let i = 0; i <= 40; i += 1) {
         const val = C * Math.pow(1 + r, i) - (PMT / r);
+        const totalContributions = P + (PMT * i);
+        
         path.push({ x: i, y: val });
+        contributionsPath.push({ x: i, y: totalContributions });
         targetLine.push({ x: i, y: target });
     }
 
@@ -31,6 +36,7 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
     return {
         current: { balance, velocity, acceleration },
         path,
+        contributionsPath,
         targetLine,
         yearsToTarget,
         realRate: r
@@ -43,14 +49,24 @@ const mainChart = new Chart(ctx, {
     data: {
         datasets: [
             {
-                label: 'Projected Wealth (Real)',
+                label: 'Cumulative Contributions',
+                data: [],
+                borderColor: '#cbd5e0',
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: 'origin',
+                backgroundColor: 'rgba(160, 174, 192, 0.25)', // Neutral gray baseline layer
+                tension: 0.4
+            },
+            {
+                label: 'Compound Growth',
                 data: [],
                 borderColor: '#4472c4',
                 borderWidth: 3,
                 pointRadius: 0,
                 pointHoverRadius: 6,
-                fill: true,
-                backgroundColor: 'rgba(68, 114, 196, 0.1)',
+                fill: '-1', // Fills the space dynamically between this line and the contributions dataset below it
+                backgroundColor: 'rgba(68, 114, 196, 0.25)', // Rich blue compounding growth layer
                 tension: 0.4 
             }, 
             {
@@ -79,7 +95,6 @@ const mainChart = new Chart(ctx, {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 400, easing: 'easeOutQuart' },
-        // Allows line and area hovering without pixel-perfect coordinate intersection
         interaction: {
             mode: 'index',
             intersect: false
@@ -101,35 +116,46 @@ const mainChart = new Chart(ctx, {
             }
         },
         plugins: { 
-            legend: { display: true, position: 'top', labels: { filter: item => item.text !== 'Current Position' } },
+            legend: { 
+                display: true, 
+                position: 'top', 
+                labels: { 
+                    filter: item => item.text !== 'Current Position' 
+                } 
+            },
             tooltip: {
                 callbacks: {
                     label: function(context) {
-                        if (context.datasetIndex === 1) {
-                            return [
-                                `Target Wealth: $${context.parsed.y.toLocaleString()}`,
-                                `ℹ️ Green Line: Your constant financial horizon goal.`
-                            ];
+                        const datasetIndex = context.datasetIndex;
+                        const dataIndex = context.dataIndex;
+                        
+                        // Guard clause to ensure arrays are fully initialized
+                        if (!context.chart.data.datasets[0].data[dataIndex] || !context.chart.data.datasets[1].data[dataIndex]) {
+                            return '';
                         }
                         
-                        const t = context.parsed.x;
-                        const inf = parseFloat(document.getElementById('infInput').value) / 100 || 0;
-                        const nom = parseFloat(document.getElementById('rateInput').value) / 100 || 0;
-                        const P = parseFloat(document.getElementById('principalInput').value) || 0;
-                        const PMT = (parseFloat(document.getElementById('depositInput').value) || 0) * 12;
-                        
-                        const r = ((1 + nom) / (1 + inf)) - 1;
-                        const C = P + (PMT / r);
-                        const lnA = Math.log(1 + r);
-                        
-                        const bal = context.parsed.y;
-                        const vel = C * lnA * Math.pow(1 + r, t);
-                        
-                        return [
-                            `Balance: $${Math.round(bal).toLocaleString()}`,
-                            `Velocity: $${Math.round(vel).toLocaleString()} / yr`,
-                            `ℹ️ Blue Area: Projected real growth adjusted for inflation drag.`
-                        ];
+                        const contribVal = context.chart.data.datasets[0].data[dataIndex].y;
+                        const totalBal = context.chart.data.datasets[1].data[dataIndex].y;
+                        const growthVal = Math.max(0, totalBal - contribVal);
+
+                        if (datasetIndex === 0) {
+                            return [
+                                `Cumulative Contributions: $${Math.round(contribVal).toLocaleString()}`,
+                                `  ↳ Base Layer: Your principal out-of-pocket savings.`
+                            ];
+                        } else if (datasetIndex === 1) {
+                            return [
+                                `Compound Growth: $${Math.round(growthVal).toLocaleString()}`,
+                                `  ↳ Top Layer: Exponential earnings generated via compounding interest.`,
+                                `Total Real Wealth: $${Math.round(totalBal).toLocaleString()}`
+                            ];
+                        } else if (datasetIndex === 2) {
+                            return [
+                                `Target Wealth: $${Math.round(context.parsed.y).toLocaleString()}`,
+                                `  ↳ Horizon Marker: Your constant target milestone.`
+                            ];
+                        }
+                        return null;
                     }
                 }
             }
@@ -175,9 +201,10 @@ function updateApp() {
         mainChart.options.scales.y.max = undefined;
     }
 
-    mainChart.data.datasets[0].data = results.path;
-    mainChart.data.datasets[1].data = results.targetLine;
-    mainChart.data.datasets[2].data = [{ x: t, y: results.current.balance }];
+    mainChart.data.datasets[0].data = results.contributionsPath;
+    mainChart.data.datasets[1].data = results.path;
+    mainChart.data.datasets[2].data = results.targetLine;
+    mainChart.data.datasets[3].data = [{ x: t, y: results.current.balance }];
     mainChart.update();
 }
 
