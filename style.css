@@ -29,7 +29,13 @@ body {
 }
 
 .stat-card { text-align: center; }
-.stat-card h3 { margin: 0; font-size: 0.85em; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+.stat-card h3 { 
+    margin: 0; 
+    font-size: 0.85em; 
+    color: #666; 
+    text-transform: uppercase; 
+    letter-spacing: 1px; 
+}
 .stat-card p { margin: 8px 0 0; font-size: 1.4em; font-weight: bold; }
 
 .color-pos { color: #4472c4; }
@@ -64,18 +70,16 @@ body {
     width: 100%;
 }
 
-/* Enhanced Label & Tooltip Setup */
-.label-text { 
-    font-weight: 600; 
-    font-size: 0.9em; 
-    color: #4a5568; 
+/* Global Tooltip Triggers */
+.label-text, .stat-card h3 { 
     position: relative;
     cursor: help;
     border-bottom: 1px dashed #cbd5e0;
     padding-bottom: 2px;
+    display: inline-block;
 }
 
-.label-text::after {
+[data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
     bottom: 140%;
@@ -95,9 +99,11 @@ body {
     pointer-events: none;
     box-shadow: 0 10px 20px rgba(0,0,0,0.15);
     transition: opacity 0.2s ease, transform 0.2s ease;
+    text-transform: none;
+    letter-spacing: normal;
 }
 
-.label-text:hover::after {
+[data-tooltip]:hover::after {
     opacity: 1;
     transform: translateX(-50%) scale(1);
 }
@@ -168,13 +174,13 @@ input[type=range]::-webkit-slider-thumb:hover { background: #2b6cb0; }
         height: 250px;
     }
 
-    .label-text::after {
+    [data-tooltip]::after {
         left: 0;
         transform: translateX(0) scale(0.95);
         width: 200px;
     }
     
-    .label-text:hover::after {
+    [data-tooltip]:hover::after {
         transform: translateX(0) scale(1);
     }
 }
