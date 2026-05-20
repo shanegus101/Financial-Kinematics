@@ -1,22 +1,38 @@
 function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposit, target) {
-    const r_real = ((1 + nominalRate) / (1 + inflation)) - 1;
-    const r = r_real > 0 ? r_real : 0.0001; 
+    // Fisher Equation for exact real rate of return
+    const r = ((1 + nominalRate) / (1 + inflation)) - 1;
     
     const P = principal;
-    const PMT = monthlyDeposit * 12; 
-    const C = P + (PMT / r);
-    const lnA = Math.log(1 + r);
+    const PMT = monthlyDeposit * 12; // Annualized deposit stream
+    
+    let balance, velocity, acceleration;
+    const lnA = (r > -1 && r !== 0) ? Math.log(1 + r) : 0;
 
-    const balance = C * Math.pow(1 + r, t) - (PMT / r);
-    const velocity = C * lnA * Math.pow(1 + r, t);
-    const acceleration = C * Math.pow(lnA, 2) * Math.pow(1 + r, t);
+    // 1. Handle the Linear Case: 0% exact real net return (Nominal Rate == Inflation Drag)
+    if (Math.abs(r) < 1e-7) {
+        balance = P + PMT * t;
+        velocity = PMT;
+        acceleration = 0;
+    } else {
+        // 2. Handle Exponential Cases (Both positive and negative real interest rates)
+        const C = P + (PMT / r);
+        balance = C * Math.pow(1 + r, t) - (PMT / r);
+        velocity = C * lnA * Math.pow(1 + r, t);
+        acceleration = C * Math.pow(lnA, 2) * Math.pow(1 + r, t);
+    }
 
     const path = [];
     const contributionsPath = [];
     const targetLine = [];
     
+    // Generate standard chart trajectory data points
     for (let i = 0; i <= 40; i += 1) {
-        const val = C * Math.pow(1 + r, i) - (PMT / r);
+        let val;
+        if (Math.abs(r) < 1e-7) {
+            val = P + PMT * i;
+        } else {
+            val = (P + (PMT / r)) * Math.pow(1 + r, i) - (PMT / r);
+        }
         const totalContributions = P + (PMT * i);
         
         path.push({ x: i, y: val });
@@ -24,26 +40,37 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
         targetLine.push({ x: i, y: target });
     }
 
+    // Calculate exact timeframe required to reach the Target Milestone
     let yearsToTarget = null;
-    const numerator = target + (PMT / r);
-    if (numerator > 0 && C > 0) {
-        const targetT = Math.log(numerator / C) / lnA;
-        if (targetT > 0 && targetT < 100) {
-            yearsToTarget = targetT;
+    if (P >= target) {
+        yearsToTarget = 0;
+    } else if (Math.abs(r) < 1e-7) {
+        if (PMT > 0) {
+            const targetT = (target - P) / PMT;
+            if (targetT >= 0) yearsToTarget = targetT;
+        }
+    } else {
+        const C = P + (PMT / r);
+        const numerator = target + (PMT / r);
+        if (C > 0 && numerator > 0) {
+            const targetT = Math.log(numerator / C) / lnA;
+            if (targetT >= 0 && targetT < 100) {
+                yearsToTarget = targetT;
+            }
         }
     }
 
-    // Solve for Crossover: Balance * r = PMT
-    // C * (1+r)^t - PMT/r = PMT/r  =>  C * (1+r)^t = 2*PMT/r  =>  (1+r)^t = (2*PMT) / (r*C)
+    // Solve for Compounding Crossover: Instantaneous Annual Interest Growth == Annual Deposits
     let crossoverYear = null;
-    if (PMT > 0) {
+    if (r > 0 && PMT > 0) {
+        const C = P + (PMT / r);
         const argument = (2 * PMT) / (r * C);
         if (argument > 0) {
             const tCross = Math.log(argument) / lnA;
             if (tCross >= 0 && tCross <= 40) {
                 crossoverYear = tCross;
             } else if (tCross < 0) {
-                // If tCross < 0, it means initial principal growth already exceeds annual deposits at Year 0
+                // If interest growth already dominates out-of-pocket savings at Year 0
                 crossoverYear = 0;
             }
         }
@@ -70,7 +97,6 @@ const crossoverPlugin = {
             const xAxis = chart.scales.x;
             const yAxis = chart.scales.y;
             
-            // Only draw if the crossover point sits within our visible 0-40 window
             if (xVal >= xAxis.min && xVal <= xAxis.max) {
                 const xPixel = xAxis.getPixelForValue(xVal);
                 const topY = yAxis.top;
@@ -78,17 +104,14 @@ const crossoverPlugin = {
                 const ctx = chart.ctx;
                 
                 ctx.save();
-                
-                // Draw Dashed Vertical Line
                 ctx.beginPath();
                 ctx.setLineDash([6, 4]);
                 ctx.moveTo(xPixel, topY);
                 ctx.lineTo(xPixel, bottomY);
                 ctx.lineWidth = 2;
-                ctx.strokeStyle = '#e74c3c'; // Vivid crimson red
+                ctx.strokeStyle = '#e74c3c'; 
                 ctx.stroke();
                 
-                // Dynamic Text Alignment (switches sides if line hits the right edge of the screen)
                 const textSpace = 8;
                 ctx.font = 'bold 11px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif';
                 
@@ -107,7 +130,6 @@ const crossoverPlugin = {
                     ctx.fillStyle = '#555';
                     ctx.fillText(`Year ${xVal.toFixed(1)} (Growth ≥ Deposits)`, xPixel + textSpace, topY + 30);
                 }
-                
                 ctx.restore();
             }
         }
@@ -117,7 +139,7 @@ const crossoverPlugin = {
 const ctx = document.getElementById('mainChart').getContext('2d');
 const mainChart = new Chart(ctx, {
     type: 'line',
-    plugins: [crossoverPlugin], // Register the inline plugin
+    plugins: [crossoverPlugin],
     data: {
         datasets: [
             {
@@ -148,7 +170,6 @@ const mainChart = new Chart(ctx, {
                 borderWidth: 2,
                 borderDash: [5, 5],
                 pointRadius: 0,
-                pointHoverRadius: 6,
                 fill: false
             },
             {
@@ -167,21 +188,15 @@ const mainChart = new Chart(ctx, {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 400, easing: 'easeOutQuart' },
-        interaction: {
-            mode: 'index',
-            intersect: false
-        },
+        interaction: { mode: 'index', intersect: false },
         scales: {
             x: { type: 'linear', position: 'bottom', min: 0, max: 40, title: { display: true, text: 'Years', font: { weight: 'bold' } } },
             y: { 
                 beginAtZero: true, 
                 ticks: { 
                     callback: function(v) {
-                        if (v >= 1000000) {
-                            return '$' + (v / 1000000).toFixed(1) + 'M';
-                        } else if (v >= 1000) {
-                            return '$' + (v / 1000).toFixed(0) + 'K';
-                        }
+                        if (v >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
+                        if (v >= 1000) return '$' + (v / 1000).toFixed(0) + 'K';
                         return '$' + v;
                     }
                 } 
@@ -191,13 +206,9 @@ const mainChart = new Chart(ctx, {
             legend: { 
                 display: true, 
                 position: 'top', 
-                labels: { 
-                    filter: item => item.text !== 'Current Position' 
-                } 
+                labels: { filter: item => item.text !== 'Current Position' } 
             },
-            crossoverLine: {
-                xVal: null // Placeholder state updated dynamically inside updateApp()
-            },
+            crossoverLine: { xVal: null },
             tooltip: {
                 callbacks: {
                     label: function(context) {
@@ -210,23 +221,23 @@ const mainChart = new Chart(ctx, {
                         
                         const contribVal = context.chart.data.datasets[0].data[dataIndex].y;
                         const totalBal = context.chart.data.datasets[1].data[dataIndex].y;
-                        const growthVal = Math.max(0, totalBal - contribVal);
+                        const growthVal = totalBal - contribVal;
 
                         if (datasetIndex === 0) {
                             return [
                                 `Cumulative Contributions: $${Math.round(contribVal).toLocaleString()}`,
-                                `  ↳ Base Layer: Your principal out-of-pocket savings.`
+                                `   ↳ Base Layer: Your principal out-of-pocket savings.`
                             ];
                         } else if (datasetIndex === 1) {
                             return [
                                 `Compound Growth: $${Math.round(growthVal).toLocaleString()}`,
-                                `  ↳ Top Layer: Exponential earnings generated via compounding interest.`,
+                                `   ↳ Top Layer: Exponential earnings generated via compounding interest.`,
                                 `Total Real Wealth: $${Math.round(totalBal).toLocaleString()}`
                             ];
                         } else if (datasetIndex === 2) {
                             return [
                                 `Target Wealth: $${Math.round(context.parsed.y).toLocaleString()}`,
-                                `  ↳ Horizon Marker: Your constant target milestone.`
+                                `   ↳ Horizon Marker: Your constant target milestone.`
                             ];
                         }
                         return null;
@@ -261,7 +272,7 @@ function updateApp() {
     document.getElementById('accDisp').innerText = "$" + Math.round(results.current.acceleration).toLocaleString() + "/yr²";
     
     const targetEl = document.getElementById('targetDisp');
-    if (results.yearsToTarget) {
+    if (results.yearsToTarget !== null) {
         targetEl.innerText = results.yearsToTarget.toFixed(1) + " yrs";
         targetEl.style.color = "#2ecc71";
     } else {
@@ -275,9 +286,7 @@ function updateApp() {
         mainChart.options.scales.y.max = undefined;
     }
 
-    // Update the inline plugin's configuration state before redraw
     mainChart.options.plugins.crossoverLine.xVal = results.crossoverYear;
-
     mainChart.data.datasets[0].data = results.contributionsPath;
     mainChart.data.datasets[1].data = results.path;
     mainChart.data.datasets[2].data = results.targetLine;
