@@ -30,8 +30,8 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
     const path = [];
     const contributionsPath = [];
     const targetLine = [];
-    const path10 = [];
-    const path90 = [];
+    const path5 = [];
+    const path95 = [];
     const pathMedian = [];
     
     // 2. Monte Carlo Simulation Engine
@@ -43,7 +43,6 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
             let currentBal = P;
             simPaths[0].push(currentBal);
             for (let i = 1; i <= 40; i++) {
-                // Apply randomized return for this specific year
                 const annualReturn = randomNormal(nominalRate, volatility);
                 const realRate = ((1 + annualReturn) / (1 + inflation)) - 1;
                 currentBal = currentBal * (1 + realRate) + PMT;
@@ -53,9 +52,10 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
 
         for (let i = 0; i <= 40; i++) {
             simPaths[i].sort((a, b) => a - b);
-            path10.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.1)] });
+            // Modified to 5th and 95th percentiles for a clean 90% overall probability distribution window
+            path5.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.05)] });
             pathMedian.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.5)] });
-            path90.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.9)] });
+            path95.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.95)] });
             contributionsPath.push({ x: i, y: P + (PMT * i) });
             targetLine.push({ x: i, y: target });
         }
@@ -69,7 +69,6 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
         }
     }
 
-    // Calculate timeframe required to reach Target
     let yearsToTarget = null;
     if (P >= target) {
         yearsToTarget = 0;
@@ -87,7 +86,6 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
         }
     }
 
-    // Solve for Compounding Crossover
     let crossoverYear = null;
     if (r > 0 && PMT > 0) {
         const C = P + (PMT / r);
@@ -105,8 +103,8 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
     return {
         current: { balance, velocity, acceleration },
         path: volatility > 0 ? pathMedian : path,
-        path10: volatility > 0 ? path10 : [],
-        path90: volatility > 0 ? path90 : [],
+        path5: volatility > 0 ? path5 : [],
+        path95: volatility > 0 ? path95 : [],
         contributionsPath,
         targetLine,
         yearsToTarget,
@@ -179,7 +177,7 @@ const mainChart = new Chart(ctx, {
                 tension: 0.4
             },
             {
-                label: '10th Percentile', // Index 1
+                label: '5th Percentile', // Index 1
                 data: [],
                 borderColor: 'transparent',
                 borderWidth: 0,
@@ -188,13 +186,13 @@ const mainChart = new Chart(ctx, {
                 tension: 0.4
             },
             {
-                label: '90th Percentile', // Index 2
+                label: '95th Percentile', // Index 2
                 data: [],
                 borderColor: 'transparent',
                 borderWidth: 0,
                 pointRadius: 0,
-                fill: 1, // Fills down to the 10th percentile dataset
-                backgroundColor: 'rgba(68, 114, 196, 0.1)', // Lightest probability band
+                fill: 1, // Fills target space down to Index 1 (5th Percentile)
+                backgroundColor: 'rgba(68, 114, 196, 0.1)', 
                 tension: 0.4
             },
             {
@@ -204,7 +202,7 @@ const mainChart = new Chart(ctx, {
                 borderWidth: 3,
                 pointRadius: 0,
                 pointHoverRadius: 6,
-                fill: 0, // Fills down to cumulative contributions
+                fill: 0, 
                 backgroundColor: 'rgba(68, 114, 196, 0.25)', 
                 tension: 0.4 
             }, 
@@ -251,54 +249,68 @@ const mainChart = new Chart(ctx, {
             legend: { 
                 display: true, 
                 position: 'top', 
-                labels: { filter: item => !['Current Position', '10th Percentile', '90th Percentile'].includes(item.text) } 
+                labels: { filter: item => !['Current Position', '5th Percentile', '95th Percentile'].includes(item.text) } 
             },
             crossoverLine: { xVal: null },
             tooltip: {
-                callbacks: {
-                    label: function(context) {
-                        const datasetIndex = context.datasetIndex;
-                        const dataIndex = context.dataIndex;
-                        
-                        if (datasetIndex === 1) return null; // Hide raw 10th percentile string
+                enabled: false, // Disables native floating popup to support projected layout box mapping
+                external: function(context) {
+                    const tooltipEl = document.getElementById('graphTooltipBox');
+                    if (!tooltipEl) return;
 
-                        if (datasetIndex === 2) {
-                            const p90 = context.chart.data.datasets[2].data[dataIndex]?.y;
-                            const p10 = context.chart.data.datasets[1].data[dataIndex]?.y;
-                            if (p90 && p10) {
-                                return [
-                                    `90th Percentile: $${Math.round(p90).toLocaleString()}`,
-                                    `10th Percentile: $${Math.round(p10).toLocaleString()}`,
-                                    `  ↳ Shaded Area: Market volatility bounds (80% probability).`
-                                ];
-                            }
-                            return null;
+                    const tooltipModel = context.tooltip;
+                    if (tooltipModel.opacity === 0) return; // Retains current snapshot on mouse leave for viewability
+
+                    if (tooltipModel.body) {
+                        const chart = context.chart;
+                        const activePoint = tooltipModel.dataPoints[0];
+                        
+                        // Extract precise timeline year. Prevents the orange workspace tracker from defaulting to index "0"
+                        const exactYear = activePoint.parsed.x;
+                        const lookupIndex = Math.min(40, Math.max(0, Math.round(exactYear)));
+
+                        // Requirement 1 & 4: Inject clear title string formatting
+                        let htmlContent = `<div class="tooltip-title">Year ${exactYear.toFixed(1)}</div>`;
+
+                        const contribVal = chart.data.datasets[0].data[lookupIndex]?.y;
+                        const p5Val = chart.data.datasets[1].data[lookupIndex]?.y;
+                        const p95Val = chart.data.datasets[2].data[lookupIndex]?.y;
+                        const totalBal = chart.data.datasets[3].data[lookupIndex]?.y;
+                        const targetVal = chart.data.datasets[4].data[lookupIndex]?.y;
+
+                        if (contribVal !== undefined) {
+                            htmlContent += `
+                                <div class="tooltip-row"><strong>Contributions:</strong> <span>$${Math.round(contribVal).toLocaleString()}</span></div>
+                            `;
                         }
 
-                        const contribVal = context.chart.data.datasets[0].data[dataIndex]?.y;
-                        const totalBal = context.chart.data.datasets[3].data[dataIndex]?.y;
-                        
-                        if (!contribVal || !totalBal) return '';
-                        const growthVal = totalBal - contribVal;
-
-                        if (datasetIndex === 0) {
-                            return [
-                                `Cumulative Contributions: $${Math.round(contribVal).toLocaleString()}`,
-                                `   ↳ Base Layer: Your principal out-of-pocket savings.`
-                            ];
-                        } else if (datasetIndex === 3) {
-                            return [
-                                `Compound Growth (Median): $${Math.round(growthVal).toLocaleString()}`,
-                                `   ↳ Top Layer: Exponential earnings generated via compounding interest.`,
-                                `Total Real Wealth: $${Math.round(totalBal).toLocaleString()}`
-                            ];
-                        } else if (datasetIndex === 4) {
-                            return [
-                                `Target Wealth: $${Math.round(context.parsed.y).toLocaleString()}`,
-                                `   ↳ Horizon Marker: Your constant target milestone.`
-                            ];
+                        if (totalBal !== undefined && contribVal !== undefined) {
+                            const growthVal = Math.max(0, totalBal - contribVal);
+                            htmlContent += `
+                                <div class="tooltip-row"><strong>Compound Growth:</strong> <span>$${Math.round(growthVal).toLocaleString()}</span></div>
+                                <div class="tooltip-row" style="border-top: 1px solid #cbd5e0; padding-top: 4px; margin-top: 4px;">
+                                    <strong>Total Real Wealth:</strong> <span style="color:#4472c4; font-weight:bold;">$${Math.round(totalBal).toLocaleString()}</span>
+                                </div>
+                            `;
                         }
-                        return null;
+
+                        // Requirement 2: 90% Probability bounds metrics display updates
+                        if (p5Val !== undefined && p95Val !== undefined && chart.data.datasets[1].data.length > 0) {
+                            htmlContent += `
+                                <div class="tooltip-row" style="margin-top: 8px; border-top: 1px dashed #cbd5e0; padding-top: 4px;"><strong>95th Percentile:</strong> <span>$${Math.round(p95Val).toLocaleString()}</span></div>
+                                <div class="tooltip-row"><strong>5th Percentile:</strong> <span>$${Math.round(p5Val).toLocaleString()}</span></div>
+                                <div class="tooltip-row-nested">↳ Shaded Horizon: Market variance bounds (90% probability)</div>
+                            `;
+                        }
+
+                        if (targetVal !== undefined) {
+                            htmlContent += `
+                                <div class="tooltip-row" style="margin-top: 4px; font-size: 0.9em; color: #2ecc71;"><strong>Target Wealth:</strong> <span>$${Math.round(targetVal).toLocaleString()}</span></div>
+                            `;
+                        }
+
+                        // Requirement 5: Print HTML data changes directly inside target side layout component
+                        tooltipEl.innerHTML = htmlContent;
                     }
                 }
             }
@@ -348,8 +360,8 @@ function updateApp() {
 
     mainChart.options.plugins.crossoverLine.xVal = results.crossoverYear;
     mainChart.data.datasets[0].data = results.contributionsPath;
-    mainChart.data.datasets[1].data = results.path10;
-    mainChart.data.datasets[2].data = results.path90;
+    mainChart.data.datasets[1].data = results.path5;
+    mainChart.data.datasets[2].data = results.path95;
     mainChart.data.datasets[3].data = results.path;
     mainChart.data.datasets[4].data = results.targetLine;
     mainChart.data.datasets[5].data = [{ x: t, y: results.current.balance }];
