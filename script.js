@@ -1,20 +1,26 @@
-function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposit, target) {
-    // Fisher Equation for exact real rate of return
+// --- Helper: Standard Normal Distribution Generator (Box-Muller Transform) ---
+function randomNormal(mean, stdDev) {
+    let u = 0, v = 0;
+    while(u === 0) u = Math.random();
+    while(v === 0) v = Math.random();
+    const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    return (z * stdDev) + mean;
+}
+
+function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposit, target, volatility) {
     const r = ((1 + nominalRate) / (1 + inflation)) - 1;
-    
     const P = principal;
-    const PMT = monthlyDeposit * 12; // Annualized deposit stream
+    const PMT = monthlyDeposit * 12; 
     
     let balance, velocity, acceleration;
     const lnA = (r > -1 && r !== 0) ? Math.log(1 + r) : 0;
 
-    // 1. Handle the Linear Case: 0% exact real net return (Nominal Rate == Inflation Drag)
+    // 1. Calculate Expected Kinematic State (Text Display)
     if (Math.abs(r) < 1e-7) {
         balance = P + PMT * t;
         velocity = PMT;
         acceleration = 0;
     } else {
-        // 2. Handle Exponential Cases (Both positive and negative real interest rates)
         const C = P + (PMT / r);
         balance = C * Math.pow(1 + r, t) - (PMT / r);
         velocity = C * lnA * Math.pow(1 + r, t);
@@ -24,23 +30,46 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
     const path = [];
     const contributionsPath = [];
     const targetLine = [];
+    const path10 = [];
+    const path90 = [];
+    const pathMedian = [];
     
-    // Generate standard chart trajectory data points
-    for (let i = 0; i <= 40; i += 1) {
-        let val;
-        if (Math.abs(r) < 1e-7) {
-            val = P + PMT * i;
-        } else {
-            val = (P + (PMT / r)) * Math.pow(1 + r, i) - (PMT / r);
-        }
-        const totalContributions = P + (PMT * i);
+    // 2. Monte Carlo Simulation Engine
+    if (volatility > 0) {
+        const numPaths = 250;
+        const simPaths = Array.from({length: 41}, () => []);
         
-        path.push({ x: i, y: val });
-        contributionsPath.push({ x: i, y: totalContributions });
-        targetLine.push({ x: i, y: target });
+        for (let p = 0; p < numPaths; p++) {
+            let currentBal = P;
+            simPaths[0].push(currentBal);
+            for (let i = 1; i <= 40; i++) {
+                // Apply randomized return for this specific year
+                const annualReturn = randomNormal(nominalRate, volatility);
+                const realRate = ((1 + annualReturn) / (1 + inflation)) - 1;
+                currentBal = currentBal * (1 + realRate) + PMT;
+                simPaths[i].push(currentBal);
+            }
+        }
+
+        for (let i = 0; i <= 40; i++) {
+            simPaths[i].sort((a, b) => a - b);
+            path10.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.1)] });
+            pathMedian.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.5)] });
+            path90.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.9)] });
+            contributionsPath.push({ x: i, y: P + (PMT * i) });
+            targetLine.push({ x: i, y: target });
+        }
+    } else {
+        // Deterministic Fallback
+        for (let i = 0; i <= 40; i += 1) {
+            let val = (Math.abs(r) < 1e-7) ? (P + PMT * i) : ((P + (PMT / r)) * Math.pow(1 + r, i) - (PMT / r));
+            path.push({ x: i, y: val });
+            contributionsPath.push({ x: i, y: P + (PMT * i) });
+            targetLine.push({ x: i, y: target });
+        }
     }
 
-    // Calculate exact timeframe required to reach the Target Milestone
+    // Calculate timeframe required to reach Target
     let yearsToTarget = null;
     if (P >= target) {
         yearsToTarget = 0;
@@ -54,13 +83,11 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
         const numerator = target + (PMT / r);
         if (C > 0 && numerator > 0) {
             const targetT = Math.log(numerator / C) / lnA;
-            if (targetT >= 0 && targetT < 100) {
-                yearsToTarget = targetT;
-            }
+            if (targetT >= 0 && targetT < 100) yearsToTarget = targetT;
         }
     }
 
-    // Solve for Compounding Crossover: Instantaneous Annual Interest Growth == Annual Deposits
+    // Solve for Compounding Crossover
     let crossoverYear = null;
     if (r > 0 && PMT > 0) {
         const C = P + (PMT / r);
@@ -70,7 +97,6 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
             if (tCross >= 0 && tCross <= 40) {
                 crossoverYear = tCross;
             } else if (tCross < 0) {
-                // If interest growth already dominates out-of-pocket savings at Year 0
                 crossoverYear = 0;
             }
         }
@@ -78,7 +104,9 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
 
     return {
         current: { balance, velocity, acceleration },
-        path,
+        path: volatility > 0 ? pathMedian : path,
+        path10: volatility > 0 ? path10 : [],
+        path90: volatility > 0 ? path90 : [],
         contributionsPath,
         targetLine,
         yearsToTarget,
@@ -87,11 +115,9 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
     };
 }
 
-// Inline Canvas Plugin to render the Crossover vertical line cleanly
 const crossoverPlugin = {
     id: 'crossoverLine',
-    afterDraw: (chart) => {
-        const options = chart.config.options.plugins.crossoverLine;
+    afterDraw: (chart, args, options) => {
         if (options && options.xVal !== null) {
             const xVal = options.xVal;
             const xAxis = chart.scales.x;
@@ -143,7 +169,7 @@ const mainChart = new Chart(ctx, {
     data: {
         datasets: [
             {
-                label: 'Cumulative Contributions',
+                label: 'Cumulative Contributions', // Index 0
                 data: [],
                 borderColor: '#cbd5e0',
                 borderWidth: 2,
@@ -153,18 +179,37 @@ const mainChart = new Chart(ctx, {
                 tension: 0.4
             },
             {
-                label: 'Compound Growth',
+                label: '10th Percentile', // Index 1
+                data: [],
+                borderColor: 'transparent',
+                borderWidth: 0,
+                pointRadius: 0,
+                fill: false,
+                tension: 0.4
+            },
+            {
+                label: '90th Percentile', // Index 2
+                data: [],
+                borderColor: 'transparent',
+                borderWidth: 0,
+                pointRadius: 0,
+                fill: 1, // Fills down to the 10th percentile dataset
+                backgroundColor: 'rgba(68, 114, 196, 0.1)', // Lightest probability band
+                tension: 0.4
+            },
+            {
+                label: 'Compound Growth', // Index 3
                 data: [],
                 borderColor: '#4472c4',
                 borderWidth: 3,
                 pointRadius: 0,
                 pointHoverRadius: 6,
-                fill: '-1', 
+                fill: 0, // Fills down to cumulative contributions
                 backgroundColor: 'rgba(68, 114, 196, 0.25)', 
                 tension: 0.4 
             }, 
             {
-                label: 'Target Wealth',
+                label: 'Target Wealth', // Index 4
                 data: [],
                 borderColor: '#2ecc71',
                 borderWidth: 2,
@@ -173,7 +218,7 @@ const mainChart = new Chart(ctx, {
                 fill: false
             },
             {
-                label: 'Current Position',
+                label: 'Current Position', // Index 5
                 data: [{x: 0, y: 0}],
                 backgroundColor: '#ed7d31',
                 borderColor: '#fff',
@@ -206,7 +251,7 @@ const mainChart = new Chart(ctx, {
             legend: { 
                 display: true, 
                 position: 'top', 
-                labels: { filter: item => item.text !== 'Current Position' } 
+                labels: { filter: item => !['Current Position', '10th Percentile', '90th Percentile'].includes(item.text) } 
             },
             crossoverLine: { xVal: null },
             tooltip: {
@@ -215,12 +260,25 @@ const mainChart = new Chart(ctx, {
                         const datasetIndex = context.datasetIndex;
                         const dataIndex = context.dataIndex;
                         
-                        if (!context.chart.data.datasets[0].data[dataIndex] || !context.chart.data.datasets[1].data[dataIndex]) {
-                            return '';
+                        if (datasetIndex === 1) return null; // Hide raw 10th percentile string
+
+                        if (datasetIndex === 2) {
+                            const p90 = context.chart.data.datasets[2].data[dataIndex]?.y;
+                            const p10 = context.chart.data.datasets[1].data[dataIndex]?.y;
+                            if (p90 && p10) {
+                                return [
+                                    `90th Percentile: $${Math.round(p90).toLocaleString()}`,
+                                    `10th Percentile: $${Math.round(p10).toLocaleString()}`,
+                                    `  ↳ Shaded Area: Market volatility bounds (80% probability).`
+                                ];
+                            }
+                            return null;
                         }
+
+                        const contribVal = context.chart.data.datasets[0].data[dataIndex]?.y;
+                        const totalBal = context.chart.data.datasets[3].data[dataIndex]?.y;
                         
-                        const contribVal = context.chart.data.datasets[0].data[dataIndex].y;
-                        const totalBal = context.chart.data.datasets[1].data[dataIndex].y;
+                        if (!contribVal || !totalBal) return '';
                         const growthVal = totalBal - contribVal;
 
                         if (datasetIndex === 0) {
@@ -228,13 +286,13 @@ const mainChart = new Chart(ctx, {
                                 `Cumulative Contributions: $${Math.round(contribVal).toLocaleString()}`,
                                 `   ↳ Base Layer: Your principal out-of-pocket savings.`
                             ];
-                        } else if (datasetIndex === 1) {
+                        } else if (datasetIndex === 3) {
                             return [
-                                `Compound Growth: $${Math.round(growthVal).toLocaleString()}`,
+                                `Compound Growth (Median): $${Math.round(growthVal).toLocaleString()}`,
                                 `   ↳ Top Layer: Exponential earnings generated via compounding interest.`,
                                 `Total Real Wealth: $${Math.round(totalBal).toLocaleString()}`
                             ];
-                        } else if (datasetIndex === 2) {
+                        } else if (datasetIndex === 4) {
                             return [
                                 `Target Wealth: $${Math.round(context.parsed.y).toLocaleString()}`,
                                 `   ↳ Horizon Marker: Your constant target milestone.`
@@ -254,7 +312,8 @@ const controlPairs = [
     { slider: document.getElementById('infSlider'), input: document.getElementById('infInput') },
     { slider: document.getElementById('principalSlider'), input: document.getElementById('principalInput') },
     { slider: document.getElementById('depositSlider'), input: document.getElementById('depositInput') },
-    { slider: document.getElementById('targetSlider'), input: document.getElementById('targetInput') }
+    { slider: document.getElementById('targetSlider'), input: document.getElementById('targetInput') },
+    { slider: document.getElementById('volSlider'), input: document.getElementById('volInput') }
 ];
 
 function updateApp() {
@@ -264,8 +323,9 @@ function updateApp() {
     const principal = parseFloat(document.getElementById('principalInput').value) || 0;
     const deposit = parseFloat(document.getElementById('depositInput').value) || 0;
     const target = parseFloat(document.getElementById('targetInput').value) || 0;
+    const volatility = parseFloat(document.getElementById('volInput').value) / 100 || 0;
 
-    const results = calculateKinematics(t, nominalRate, inflation, principal, deposit, target);
+    const results = calculateKinematics(t, nominalRate, inflation, principal, deposit, target, volatility);
 
     document.getElementById('balDisp').innerText = "$" + Math.round(results.current.balance).toLocaleString();
     document.getElementById('velDisp').innerText = "$" + Math.round(results.current.velocity).toLocaleString() + "/yr";
@@ -288,9 +348,11 @@ function updateApp() {
 
     mainChart.options.plugins.crossoverLine.xVal = results.crossoverYear;
     mainChart.data.datasets[0].data = results.contributionsPath;
-    mainChart.data.datasets[1].data = results.path;
-    mainChart.data.datasets[2].data = results.targetLine;
-    mainChart.data.datasets[3].data = [{ x: t, y: results.current.balance }];
+    mainChart.data.datasets[1].data = results.path10;
+    mainChart.data.datasets[2].data = results.path90;
+    mainChart.data.datasets[3].data = results.path;
+    mainChart.data.datasets[4].data = results.targetLine;
+    mainChart.data.datasets[5].data = [{ x: t, y: results.current.balance }];
     mainChart.update();
 }
 
