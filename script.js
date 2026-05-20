@@ -60,7 +60,7 @@ const mainChart = new Chart(ctx, {
                 borderWidth: 2,
                 borderDash: [5, 5],
                 pointRadius: 0,
-                pointHoverRadius: 0,
+                pointHoverRadius: 6,
                 fill: false
             },
             {
@@ -100,8 +100,15 @@ const mainChart = new Chart(ctx, {
             tooltip: {
                 callbacks: {
                     label: function(context) {
-                        if (context.datasetIndex === 1) return `Target: $${context.parsed.y.toLocaleString()}`;
+                        // Tooltip rules for hovering over the Target Line (Green)
+                        if (context.datasetIndex === 1) {
+                            return [
+                                `Target Wealth: $${context.parsed.y.toLocaleString()}`,
+                                `ℹ️ Green Line: Your constant financial horizon goal.`
+                            ];
+                        }
                         
+                        // Tooltip rules for hovering over the Wealth Area (Blue)
                         const t = context.parsed.x;
                         const inf = parseFloat(document.getElementById('infInput').value) / 100 || 0;
                         const nom = parseFloat(document.getElementById('rateInput').value) / 100 || 0;
@@ -117,7 +124,8 @@ const mainChart = new Chart(ctx, {
                         
                         return [
                             `Balance: $${Math.round(bal).toLocaleString()}`,
-                            `Velocity: $${Math.round(vel).toLocaleString()} / yr`
+                            `Velocity: $${Math.round(vel).toLocaleString()} / yr`,
+                            `ℹ️ Blue Area: Projected real growth adjusted for inflation drag.`
                         ];
                     }
                 }
@@ -158,7 +166,6 @@ function updateApp() {
         targetEl.style.color = "#e74c3c";
     }
 
-    // Dynamic Axis Scaling Rule for Small Targets
     if (target < 1000000 && target > 0) {
         mainChart.options.scales.y.max = Math.max(target * 2.5, results.current.balance * 1.2, 50000);
     } else {
