@@ -178,7 +178,7 @@ controlPairs.forEach(pair => {
     });
     
     pair.input.addEventListener('input', (e) => {
-        pair.slider.value = e.target.value;
+        pair.slider.value = parseFloat(e.target.value) || 0;
         updateApp();
     });
 });
