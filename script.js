@@ -52,7 +52,6 @@ function calculateKinematics(t, nominalRate, inflation, principal, monthlyDeposi
 
         for (let i = 0; i <= 40; i++) {
             simPaths[i].sort((a, b) => a - b);
-            // Modified to 5th and 95th percentiles for a clean 90% overall probability distribution window
             path5.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.05)] });
             pathMedian.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.5)] });
             path95.push({ x: i, y: simPaths[i][Math.floor(numPaths * 0.95)] });
@@ -160,6 +159,56 @@ const crossoverPlugin = {
     }
 };
 
+// Global tracker to preserve the active timeline snapshot during slider modifications
+let lastHoveredYear = null;
+
+// Isolated layout renderer to dynamically compile timeline performance parameters
+function renderExternalTooltip(chart, exactYear) {
+    const tooltipEl = document.getElementById('graphTooltipBox');
+    if (!tooltipEl || exactYear === null) return;
+
+    const lookupIndex = Math.min(40, Math.max(0, Math.round(exactYear)));
+    let htmlContent = `<div class="tooltip-title">Year ${exactYear.toFixed(1)}</div>`;
+
+    const contribVal = chart.data.datasets[0].data[lookupIndex]?.y;
+    const p5Val = chart.data.datasets[1].data[lookupIndex]?.y;
+    const p95Val = chart.data.datasets[2].data[lookupIndex]?.y;
+    const totalBal = chart.data.datasets[3].data[lookupIndex]?.y;
+    const targetVal = chart.data.datasets[4].data[lookupIndex]?.y;
+
+    if (contribVal !== undefined) {
+        htmlContent += `
+            <div class="tooltip-row"><strong>Contributions:</strong> <span>$${Math.round(contribVal).toLocaleString()}</span></div>
+        `;
+    }
+
+    if (totalBal !== undefined && contribVal !== undefined) {
+        const growthVal = Math.max(0, totalBal - contribVal);
+        htmlContent += `
+            <div class="tooltip-row"><strong>Compound Growth:</strong> <span>$${Math.round(growthVal).toLocaleString()}</span></div>
+            <div class="tooltip-row" style="border-top: 1px solid #cbd5e0; padding-top: 4px; margin-top: 4px;">
+                <strong>Total Real Wealth:</strong> <span style="color:#4472c4; font-weight:bold;">$${Math.round(totalBal).toLocaleString()}</span>
+            </div>
+        `;
+    }
+
+    if (p5Val !== undefined && p95Val !== undefined && chart.data.datasets[1].data.length > 0) {
+        htmlContent += `
+            <div class="tooltip-row" style="margin-top: 8px; border-top: 1px dashed #cbd5e0; padding-top: 4px;"><strong>95th Percentile:</strong> <span>$${Math.round(p95Val).toLocaleString()}</span></div>
+            <div class="tooltip-row"><strong>5th Percentile:</strong> <span>$${Math.round(p5Val).toLocaleString()}</span></div>
+            <div class="tooltip-row-nested">↳ Shaded Horizon: Market variance bounds (90% probability)</div>
+        `;
+    }
+
+    if (targetVal !== undefined) {
+        htmlContent += `
+            <div class="tooltip-row" style="margin-top: 4px; font-size: 0.9em; color: #2ecc71;"><strong>Target Wealth:</strong> <span>$${Math.round(targetVal).toLocaleString()}</span></div>
+        `;
+    }
+
+    tooltipEl.innerHTML = htmlContent;
+}
+
 const ctx = document.getElementById('mainChart').getContext('2d');
 const mainChart = new Chart(ctx, {
     type: 'line',
@@ -191,7 +240,7 @@ const mainChart = new Chart(ctx, {
                 borderColor: 'transparent',
                 borderWidth: 0,
                 pointRadius: 0,
-                fill: 1, // Fills target space down to Index 1 (5th Percentile)
+                fill: 1, 
                 backgroundColor: 'rgba(68, 114, 196, 0.1)', 
                 tension: 0.4
             },
@@ -253,64 +302,21 @@ const mainChart = new Chart(ctx, {
             },
             crossoverLine: { xVal: null },
             tooltip: {
-                enabled: false, // Disables native floating popup to support projected layout box mapping
+                enabled: false, 
+                filter: function(tooltipItem) {
+                    // FIXES "YEAR 0.0" BUG: Drops the workspace milestone point from running index-matching logic
+                    return tooltipItem.datasetIndex !== 5;
+                },
                 external: function(context) {
-                    const tooltipEl = document.getElementById('graphTooltipBox');
-                    if (!tooltipEl) return;
-
                     const tooltipModel = context.tooltip;
-                    if (tooltipModel.opacity === 0) return; // Retains current snapshot on mouse leave for viewability
+                    if (tooltipModel.opacity === 0) return; 
 
                     if (tooltipModel.body) {
-                        const chart = context.chart;
                         const activePoint = tooltipModel.dataPoints[0];
-                        
-                        // Extract precise timeline year. Prevents the orange workspace tracker from defaulting to index "0"
-                        const exactYear = activePoint.parsed.x;
-                        const lookupIndex = Math.min(40, Math.max(0, Math.round(exactYear)));
-
-                        // Requirement 1 & 4: Inject clear title string formatting
-                        let htmlContent = `<div class="tooltip-title">Year ${exactYear.toFixed(1)}</div>`;
-
-                        const contribVal = chart.data.datasets[0].data[lookupIndex]?.y;
-                        const p5Val = chart.data.datasets[1].data[lookupIndex]?.y;
-                        const p95Val = chart.data.datasets[2].data[lookupIndex]?.y;
-                        const totalBal = chart.data.datasets[3].data[lookupIndex]?.y;
-                        const targetVal = chart.data.datasets[4].data[lookupIndex]?.y;
-
-                        if (contribVal !== undefined) {
-                            htmlContent += `
-                                <div class="tooltip-row"><strong>Contributions:</strong> <span>$${Math.round(contribVal).toLocaleString()}</span></div>
-                            `;
+                        if (activePoint) {
+                            lastHoveredYear = activePoint.parsed.x;
+                            renderExternalTooltip(context.chart, lastHoveredYear);
                         }
-
-                        if (totalBal !== undefined && contribVal !== undefined) {
-                            const growthVal = Math.max(0, totalBal - contribVal);
-                            htmlContent += `
-                                <div class="tooltip-row"><strong>Compound Growth:</strong> <span>$${Math.round(growthVal).toLocaleString()}</span></div>
-                                <div class="tooltip-row" style="border-top: 1px solid #cbd5e0; padding-top: 4px; margin-top: 4px;">
-                                    <strong>Total Real Wealth:</strong> <span style="color:#4472c4; font-weight:bold;">$${Math.round(totalBal).toLocaleString()}</span>
-                                </div>
-                            `;
-                        }
-
-                        // Requirement 2: 90% Probability bounds metrics display updates
-                        if (p5Val !== undefined && p95Val !== undefined && chart.data.datasets[1].data.length > 0) {
-                            htmlContent += `
-                                <div class="tooltip-row" style="margin-top: 8px; border-top: 1px dashed #cbd5e0; padding-top: 4px;"><strong>95th Percentile:</strong> <span>$${Math.round(p95Val).toLocaleString()}</span></div>
-                                <div class="tooltip-row"><strong>5th Percentile:</strong> <span>$${Math.round(p5Val).toLocaleString()}</span></div>
-                                <div class="tooltip-row-nested">↳ Shaded Horizon: Market variance bounds (90% probability)</div>
-                            `;
-                        }
-
-                        if (targetVal !== undefined) {
-                            htmlContent += `
-                                <div class="tooltip-row" style="margin-top: 4px; font-size: 0.9em; color: #2ecc71;"><strong>Target Wealth:</strong> <span>$${Math.round(targetVal).toLocaleString()}</span></div>
-                            `;
-                        }
-
-                        // Requirement 5: Print HTML data changes directly inside target side layout component
-                        tooltipEl.innerHTML = htmlContent;
                     }
                 }
             }
@@ -366,6 +372,11 @@ function updateApp() {
     mainChart.data.datasets[4].data = results.targetLine;
     mainChart.data.datasets[5].data = [{ x: t, y: results.current.balance }];
     mainChart.update();
+
+    // FIXES STALE SLIDER BOX BUG: Repaints panel template dynamically if a user alters underlying mathematical assumptions
+    if (lastHoveredYear !== null) {
+        renderExternalTooltip(mainChart, lastHoveredYear);
+    }
 }
 
 controlPairs.forEach(pair => {
